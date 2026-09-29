@@ -1,0 +1,50 @@
+[
+  {
+    "id": "09788d2c-9f95-4bdd-8ed2-a543db854bdf",
+    "userId": "a6b027f6-d67e-4406-9ec1-be7087cb640c",
+    "name": "sfdhs",
+    "type": "Paper",
+    "version": "1.21.4",
+    "ram": "512 MB",
+    "java": "java",
+    "command": "",
+    "port": 25567,
+    "jar": "server.jar",
+    "cpu": "1",
+    "storageGb": 10,
+    "downloadUrl": "https://fill-data.papermc.io/v1/objects/5ee4f542f628a14c644410b08c94ea42e772ef4d29fe92973636b6813d4eaffc/paper-1.21.4-232.jar",
+    "createdAt": "2026-09-20T19:42:47.545Z"
+  },
+  {
+    "id": "2e644c67-4b82-4398-8538-f55b9fc14204",
+    "userId": "df89c189-1611-4ba1-a06d-46556234e61a",
+    "name": "Survival 1",
+    "type": "Paper",
+    "version": "1.12.2",
+    "ram": "2 GB",
+    "java": "java",
+    "command": "",
+    "port": 25565,
+    "jar": "server.jar",
+    "cpu": "2",
+    "storageGb": 75,
+    "downloadUrl": "https://fill-data.papermc.io/v1/objects/3a2041807f492dcdc34ebb324a287414946e3e05ec3df6fd03f5b5f7d9afc210/paper-1.12.2-1620.jar",
+    "createdAt": "2026-09-20T21:01:48.840Z"
+  },
+  {
+    "id": "d0628235-3541-4982-9b4e-d5e7bc76773b",
+    "userId": "a6b027f6-d67e-4406-9ec1-be7087cb640c",
+    "name": "survival 1",
+    "type": "Paper",
+    "version": "1.21.4",
+    "ram": "512 MB",
+    "java": "java",
+    "command": "",
+    "port": 25566,
+    "jar": "server.jar",
+    "cpu": "1",
+    "storageGb": 10,
+    "downloadUrl": "https://fill-data.papermc.io/v1/objects/5ee4f542f628a14c644410b08c94ea42e772ef4d29fe92973636b6813d4eaffc/paper-1.21.4-232.jar",
+    "createdAt": "2026-09-29T01:27:52.417Z"
+  }
+]

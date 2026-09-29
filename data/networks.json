@@ -1,0 +1,13 @@
+[
+  {
+    "id": "2e23da6a-29e0-4f89-9342-1a8d1f0f45f5",
+    "name": "network principal",
+    "proxyId": "bd0dc355-e89b-4b25-8e05-0e40c8505b39",
+    "serverIds": [
+      "b523332f-463c-42b2-a15b-4b89174b8860",
+      "e6f11f58-8e72-4aa5-92c8-b18314b97e68",
+      "e5c511ce-4cbf-4acb-9024-9147a02a34be"
+    ],
+    "createdAt": "2026-09-18T10:39:56.791Z"
+  }
+]

@@ -1,0 +1,5 @@
+node_modules/
+.next/
+managed-servers/
+.env*
+!.env.example
