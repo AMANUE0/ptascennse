@@ -3,7 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
-import { supabase, ADMIN_EMAIL } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 
 type AuthMode = "login" | "register" | "recover";
 
@@ -47,7 +47,7 @@ function AuthContent() {
         : await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: callbackUrl, data: { invited: email.toLowerCase() === ADMIN_EMAIL, ...profile } },
+          options: { emailRedirectTo: callbackUrl, data: profile },
         });
       if (result.error) throw result.error;
       if (mode === "login" || result.data.session) {

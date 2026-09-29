@@ -1,3 +1,5 @@
+import { notifyPanel } from "@/lib/lifecycle";
+import { validateDelegation } from "@/lib/member-access";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { requireServerPermission, permissionResponse } from "@/lib/server-permissions";
@@ -9,14 +11,15 @@ type Context = { params: Promise<{ id: string; subuser_id: string }> };
 export async function PUT(request: Request, context: Context) {
   try {
     const { id, subuser_id } = await context.params;
-    await requireServerPermission(id, "user.update");
+    const access = await requireServerPermission(id, "user.update");
     const body = await request.json() as { permissions?: Record<string, boolean>; active?: boolean };
     if (!body.permissions || typeof body.permissions !== "object") return NextResponse.json({ error: "permissions es obligatorio" }, { status: 400 });
     const { data, error } = await supabaseAdmin().from("server_members").update({
-      permissions: normalizePermissions(body.permissions),
+      permissions: validateDelegation(access, subuser_id, body.permissions),
       ...(typeof body.active === "boolean" ? { active: body.active } : {}),
     }).eq("server_id", id).eq("user_id", subuser_id).select("*").single();
     if (error) throw error;
+    notifyPanel();
     return NextResponse.json({ subuser: data ? { ...data, permissions: normalizePermissions(data.permissions) } : data });
   } catch (error) {
     const result = permissionResponse(error);
@@ -27,9 +30,11 @@ export async function PUT(request: Request, context: Context) {
 export async function DELETE(_: Request, context: Context) {
   try {
     const { id, subuser_id } = await context.params;
-    await requireServerPermission(id, "user.delete");
+    const access = await requireServerPermission(id, "user.delete");
+    validateDelegation(access, subuser_id, {});
     const { error } = await supabaseAdmin().from("server_members").delete().eq("server_id", id).eq("user_id", subuser_id);
     if (error) throw error;
+    notifyPanel();
     return NextResponse.json({ ok: true });
   } catch (error) {
     const result = permissionResponse(error);

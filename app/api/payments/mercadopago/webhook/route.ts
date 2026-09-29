@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { createServer } from "@/lib/server-manager";
+import { verifyMercadoPagoSignature } from "@/lib/mercadopago-webhook";
 
 export const runtime = "nodejs";
 
@@ -9,8 +10,18 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => ({})) as { type?: string; data?: { id?: string }; action?: string };
-  const paymentId = body.data?.id || new URL(request.url).searchParams.get("data.id");
+  const searchPaymentId = new URL(request.url).searchParams.get("data.id");
+  const rawBody = await request.text().catch(() => "{}");
+  const body = (() => {
+    try { return JSON.parse(rawBody || "{}") as { type?: string; data?: { id?: string }; action?: string }; }
+    catch { return {} as { type?: string; data?: { id?: string }; action?: string }; }
+  })();
+  const paymentId = body.data?.id || searchPaymentId || "";
+  try {
+    verifyMercadoPagoSignature(request, String(paymentId));
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Webhook no autorizado" }, { status: 401 });
+  }
   if (body.type !== "payment" && body.action !== "payment.created" && body.action !== "payment.updated") return NextResponse.json({ ok: true });
   if (!paymentId) return NextResponse.json({ error: "payment id missing" }, { status: 400 });
   const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;

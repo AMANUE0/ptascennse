@@ -1,3 +1,4 @@
+import { configureNetwork } from "@/lib/network-provision";
 import { NextResponse } from "next/server";
 import { getServer, readVelocityConfig, writeVelocityConfig } from "@/lib/server-manager";
 import { permissionResponse, requireServerPermission } from "@/lib/server-permissions";
@@ -20,7 +21,7 @@ export async function PUT(request: Request, { params }: Context) {
     const { server } = await requireServerPermission(id, "allocation.update");
     if (!server || server.type.toLowerCase() !== "velocity") throw new Error("Network solo está disponible para proxies Velocity");
     const data = await request.json();
-    const config = await writeVelocityConfig(id, {
+    const result = await configureNetwork(id, {
       bind: String(data.bind || `0.0.0.0:${server.port}`),
       motd: typeof data.motd === "string" ? data.motd : undefined,
       onlineMode: Boolean(data.onlineMode),
@@ -32,8 +33,8 @@ export async function PUT(request: Request, { params }: Context) {
       pingPassthrough: typeof data.pingPassthrough === "string" ? data.pingPassthrough : undefined,
       forwardingSecret: String(data.forwardingSecret || ""),
       servers: Array.isArray(data.servers) ? data.servers.filter((item: unknown): item is { name: string; address: string; priority?: number } => Boolean(item && typeof item === "object" && "name" in item && "address" in item)).map((item: { name: string; address: string; priority?: number }) => ({ ...item, priority: Number(item.priority) || 0 })) : [],
-    });
-    return NextResponse.json({ ok: true, config });
+    }, async backendId => { await requireServerPermission(backendId, "server.update"); await requireServerPermission(backendId, "allocation.update"); });
+    return NextResponse.json({ ok: true, ...result });
   } catch (error) {
     const result = permissionResponse(error);
     return NextResponse.json({ error: result.error }, { status: result.status });

@@ -1,3 +1,5 @@
+import { notifyPanel } from "@/lib/lifecycle";
+import { validateDelegation, resolveMember } from "@/lib/member-access";
 import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/server-auth";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -36,16 +38,21 @@ export async function POST(request: Request, context: Context) {
     const { id } = await context.params;
     const owner = await requireServerPermission(id, "user.create");
     const body = await request.json() as { email?: string; userId?: string; permissions?: Record<string, boolean> };
-    const userId = await findUserId(body.email, body.userId);
+    validateDelegation(owner, "", body.permissions);
+    const userId = (await resolveMember(body.email, body.userId)).id;
+    const existing = await supabaseAdmin().from("server_members").select("user_id").eq("server_id", id).eq("user_id", userId).maybeSingle();
+    if (existing.error) throw existing.error;
+    if (existing.data) await requireServerPermission(id, "user.update");
     if (!userId) return NextResponse.json({ error: "Debes indicar email o userId" }, { status: 400 });
     const { data, error } = await supabaseAdmin().from("server_members").upsert({
-      server_id: id, user_id: userId, invited_by: owner.userId, permissions: normalizePermissions(body.permissions), active: true,
+      server_id: id, user_id: userId, invited_by: owner.userId, permissions: validateDelegation(owner, userId, body.permissions), active: true,
     }, { onConflict: "server_id,user_id" }).select("*").single();
     if (error) throw error;
     await supabaseAdmin().from("notifications").insert({
       user_id: userId, type: "server_access", title: "Acceso a un servidor",
       body: `Te agregaron al servidor ${owner.server.name}`, metadata: { server_id: id },
     });
+    notifyPanel();
     return NextResponse.json({ subuser: data }, { status: 201 });
   } catch (error) {
     const result = permissionResponse(error);

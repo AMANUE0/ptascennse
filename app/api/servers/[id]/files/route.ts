@@ -57,7 +57,7 @@ export async function POST(request: Request, { params }: Context) {
     if (action === "mkdir" || action === "create") {
       if (typeof data.path !== "string") return json({ error: "path is required" }, 400);
       const target = await resolveServerPath(id, data.path, true);
-      if (action === "mkdir" || data.type === "directory") await mkdir(target.path, { recursive: false });
+      if (action === "mkdir" || data.type === "directory") await mkdir(target.path, { recursive: true });
       else await writeFile(target.path, typeof data.content === "string" ? data.content : "", "utf8");
       return json({ ok: true }, 201);
     }

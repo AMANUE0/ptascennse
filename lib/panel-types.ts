@@ -6,6 +6,7 @@ export type ServerRecord = {
   type: string;
   version: string;
   status: ServerStatus;
+  pendingAction?: "start" | "stop" | "restart" | "kill" | null;
   address: string;
   ram: string;
   color?: string;

@@ -8,7 +8,7 @@ type Context = { params: Promise<{ id: string }> };
 export async function GET(_: Request, { params }: Context) {
   try {
     const { id } = await params;
-    await requireServerPermission(id, "server.read");
+    await requireServerPermission(id, "control.console");
     await sendCommand(id, "list").catch(() => undefined);
     let metrics = await getMetrics(id);
     for (let attempt = 0; attempt < 8; attempt++) {

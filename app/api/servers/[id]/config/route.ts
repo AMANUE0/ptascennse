@@ -19,11 +19,12 @@ export async function GET(_: Request, { params }: Context) {
 export async function PUT(request: Request, { params }: Context) {
   try {
     const { id } = await params;
-    await requireServerPermission(id, "files.update");
+    const access = await requireServerPermission(id, "files.update");
     const data = await request.json() as Record<string, unknown>;
     const server = await updateServerConfig(id, {
-      name: data.name as string, ram: data.ram as string, java: data.java as string,
-      command: data.command as string, jar: data.jar as string,
+      name: data.name as string, ram: data.ram as string,
+      java: access.owner ? data.java as string : undefined,
+      jar: data.jar as string,
       port: typeof data.port === "number" ? data.port : typeof data.port === "string" ? Number(data.port) : undefined,
       cpu: data.cpu as string,
       storageGb: typeof data.storageGb === "number" ? data.storageGb : undefined,

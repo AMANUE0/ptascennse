@@ -1,3 +1,4 @@
+import { beginAction, endAction, type LifecycleAction } from "@/lib/lifecycle";
 import { NextResponse } from "next/server";
 import { appendPanelMessage, deleteServer, sendCommand, startServer, stopServer } from "@/lib/server-manager";
 import { permissionResponse, requireServerPermission } from "@/lib/server-permissions";
@@ -16,18 +17,20 @@ export async function GET(_: Request, { params }: Context) {
 }
 
 export async function POST(request: Request, { params }: Context) {
+  let lockedId: string | undefined;
   try {
     const id = (await params).id;
     const body = await request.json() as { action?: string; command?: string };
     const permission = body.action === "start" ? "control.start" : body.action === "stop" || body.action === "kill" ? "control.stop" : body.action === "restart" ? "control.restart" : body.action === "command" ? "control.console" : undefined;
     if (!permission) return NextResponse.json({ error: "action must be start, stop, restart, kill or command" }, { status: 400 });
     await requireServerPermission(id, permission);
+    if (body.action !== "command") { beginAction(id, body.action as LifecycleAction); lockedId = id; }
     if (body.action === "start" || body.action === "restart") {
       appendPanelMessage(id, body.action === "restart" ? "§eReiniciando servidor..." : "§aIniciando servidor...");
-      if (body.action === "restart") await stopServer(id);
+      if (body.action === "restart") { const stopped = await stopServer(id); if (stopped?.status !== "Detenido") throw new Error("El servidor todavía se está deteniendo"); }
       try {
         const server = await startServer(id);
-        return NextResponse.json({ server: server ? { ...server, status: "Iniciando" } : undefined });
+        return NextResponse.json({ server });
       } catch (error) {
         const message = error instanceof Error ? error.message : "error desconocido";
         appendPanelMessage(id, `§cError al iniciar: ${message}`);
@@ -43,13 +46,13 @@ export async function POST(request: Request, { params }: Context) {
   } catch (error) {
     const result = permissionResponse(error);
     return NextResponse.json({ error: result.error }, { status: result.status });
-  }
+  } finally { if (lockedId) endAction(lockedId); }
 }
 
 export async function DELETE(_: Request, { params }: Context) {
   try {
-    const { userId } = await requireServerPermission((await params).id, "server.delete");
-    await deleteServer((await params).id, userId, true);
+    await requireServerPermission((await params).id, "server.delete");
+    await deleteServer((await params).id);
     return NextResponse.json({ ok: true });
   } catch (error) {
     const result = permissionResponse(error);

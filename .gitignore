@@ -3,3 +3,5 @@ node_modules/
 managed-servers/
 .env*
 !.env.example
+
+.test-work/

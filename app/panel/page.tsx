@@ -1,13 +1,8 @@
 "use client";
 
+import { usePanelSocket } from "@/lib/use-panel-socket";
 import dynamic from "next/dynamic";
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ComponentProps,
-} from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -21,7 +16,6 @@ import {
   CirclePlay,
   Cloud,
   Code2,
-  Copy as CopyIcon,
   Cpu,
   Download,
   Ellipsis,
@@ -59,6 +53,11 @@ import { supabase } from "@/lib/supabase";
 import { minecraftLine } from "@/lib/minecraft-console";
 import type { ServerRecord } from "@/lib/panel-types";
 import { canPanelPermission } from "@/lib/panel-access";
+import MembersView from "@/components/panel/MembersView";
+import Topbar from "@/components/panel/Topbar";
+import ServerCard from "@/components/panel/ServerCard";
+import PaymentActivity from "@/components/panel/PaymentActivity";
+import Copy from "@/components/panel/Copy";
 
 // ==========================================
 // CONFIGURACIÓN Y CONSTANTES
@@ -92,33 +91,6 @@ const fileRows = [
 ];
 
 // ==========================================
-// COMPONENTE AUXILIAR COPY
-// ==========================================
-
-function Copy({ onClick, ...props }: ComponentProps<typeof CopyIcon>) {
-  const copy = async (
-    event: Parameters<NonNullable<ComponentProps<typeof CopyIcon>["onClick"]>>[0]
-  ) => {
-    const parent = event.currentTarget.parentElement;
-    const spans = parent
-      ? Array.from(parent.querySelectorAll("span"))
-          .map((span) => span.textContent?.trim())
-          .filter(Boolean)
-      : [];
-
-    const value = spans.at(-1) || parent?.textContent?.replace("⧉", "").trim();
-
-    if (value && navigator.clipboard) {
-      await navigator.clipboard.writeText(value);
-    }
-
-    onClick?.(event);
-  };
-
-  return <CopyIcon {...props} role="button" tabIndex={0} onClick={copy} />;
-}
-
-// ==========================================
 // COMPONENTE PRINCIPAL (HOME)
 // ==========================================
 
@@ -133,6 +105,11 @@ export default function Home() {
   const [toast, setToast] = useState("");
   const [loading, setLoading] = useState(true);
   const [pendingAction, setPendingAction] = useState<"start" | "stop" | "restart" | "kill" | null>(null);
+
+  const live = usePanelSocket(items => {
+    setServers(items);
+    setSelected(current => current ? items.find(item => item.id === current.id) || null : null);
+  });
 
   const [system, setSystem] = useState<{
     activeServers: number;
@@ -242,7 +219,7 @@ export default function Home() {
         return;
       }
 
-      let updated = { ...selected, ...data.server };
+      let updated = { ...selected, ...data.server, pendingAction: null };
       setSelected(updated);
       setServers((items) =>
         items.map((item) => (item.id === selected.id ? updated : item))
@@ -314,13 +291,13 @@ export default function Home() {
         return;
       }
 
-      const updated = { ...selected, ...data.server };
+      const updated = { ...selected, ...data.server, pendingAction: null };
       setSelected(updated);
       setServers((items) =>
         items.map((item) => (item.id === selected.id ? updated : item))
       );
       notify(action === "kill" ? "Proceso terminado" : "Servidor reiniciado");
-    } finally {
+    } catch (error) { notify(error instanceof Error ? error.message : "Error de conexión"); } finally {
       setPendingAction(null);
     }
   }
@@ -329,8 +306,9 @@ export default function Home() {
     server: ServerRecord,
     action: "start" | "stop" | "restart" | "kill"
   ) {
-    if (!server.id) return;
-
+    if (!server.id || server.pendingAction) return;
+    setServers(items => items.map(item => item.id === server.id ? { ...item, pendingAction: action } : item));
+    try {
     if (action === "start") {
       const response = await fetch(`/api/servers/${server.id}`, {
         method: "POST",
@@ -388,6 +366,7 @@ export default function Home() {
         ? "Servidor reiniciando"
         : "Proceso finalizado"
     );
+    } catch (error) { notify(error instanceof Error ? error.message : "Error de conexión"); } finally { setServers(items => items.map(item => item.id === server.id ? { ...item, pendingAction: null } : item)); }
   }
 
   // Si hay un servidor seleccionado, mostramos la vista de gestión
@@ -404,7 +383,7 @@ export default function Home() {
         }}
         onStatus={updateStatus}
         onAction={runAction}
-        pendingAction={pendingAction}
+        pendingAction={selected.pendingAction || pendingAction}
         consoleLine={consoleLine}
         setConsoleLine={setConsoleLine}
         notify={notify}
@@ -423,7 +402,7 @@ export default function Home() {
               <span className="eyebrow-mark" /> WORKSPACE / SERVERS
             </div>
             <h1>Mis servidores</h1>
-            <p>Administra tus mundos desde un solo lugar.</p>
+            <p>Administra tus mundos desde un solo lugar.</p><span className={`live-status ${live ? "" : "offline"}`} role="status">{live ? "● En vivo · cambios sincronizados" : "○ Reconectando actualizaciones…"}</span>
           </div>
         </header>
 
@@ -541,285 +520,6 @@ export default function Home() {
 }
 
 // ==========================================
-// TOPBAR
-// ==========================================
-
-function Topbar() {
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  useEffect(() => {
-    void supabase.auth.getUser().then(({ data }) => {
-      setIsAdmin(
-        data.user?.app_metadata?.role === "admin" ||
-          data.user?.email?.toLowerCase() === "000balderas@gmail.com"
-      );
-    });
-  }, []);
-
-  return (
-    <nav className="topbar">
-      <a className="brand" href="/panel">
-        <div className="brand-icon">
-          <Zap size={19} fill="currentColor" />
-        </div>
-        <span>
-          craft<span>panel</span>
-        </span>
-      </a>
-
-      <div className="topnav-links">
-        <span className="topnav-active">Workspace</span>
-        <a href="/panel/soporte">Soporte</a>
-        <a href="/panel/notificaciones">Notificaciones</a>
-        {isAdmin && <a href="/admin">Administración</a>}
-        <span>
-          Estado del servicio <i className="live-dot" />
-        </span>
-      </div>
-
-      <div className="top-actions">
-        <button
-          className="help-button"
-          title="Usuarios y permisos"
-          onClick={() => {
-            window.location.href = "/usuarios";
-          }}
-        >
-          <Users size={18} />
-        </button>
-
-        <button
-          className="help-button"
-          title="Soporte"
-          onClick={() => {
-            window.location.href = "/panel/soporte";
-          }}
-        >
-          <CircleHelp size={18} />
-        </button>
-
-        <div className="avatar">AG</div>
-
-        <button
-          className="help-button"
-          title="Cerrar sesión"
-          onClick={() =>
-            void supabase.auth.signOut().then(() => {
-              window.location.href = "/";
-            })
-          }
-        >
-          <LogOut size={16} />
-        </button>
-
-        <ChevronDown size={15} className="chevron" />
-      </div>
-    </nav>
-  );
-}
-
-// ==========================================
-// ACTIVIDAD DE PAGOS
-// ==========================================
-
-function PaymentActivity() {
-  const [orders, setOrders] = useState<
-    {
-      id: string;
-      plan_name: string;
-      payment_status: string;
-      provisioning_status: string;
-      created_at: string;
-    }[]
-  >([]);
-
-  useEffect(() => {
-    void fetch("/api/orders")
-      .then((response) => response.json())
-      .then((data: { orders?: typeof orders }) => setOrders(data.orders || []))
-      .catch(() => undefined);
-  }, []);
-
-  const latest = orders[0];
-
-  return (
-    <section className="activity-panel">
-      <div className="section-heading compact">
-        <div>
-          <h2>Última transacción</h2>
-          <p>Actividad reciente de pagos</p>
-        </div>
-        <a className="text-button" href="/planes/resultado?status=pending">
-          Ver pedidos <ArrowLeft size={15} className="rotate-180" />
-        </a>
-      </div>
-
-      <div className="activity-list">
-        {latest ? (
-          <ActivityItem
-            icon={latest.payment_status === "paid" ? Check : RefreshCw}
-            color={latest.payment_status === "paid" ? "green" : "orange"}
-            title={`${latest.plan_name} · ${latest.payment_status}`}
-            description={`Provisionamiento: ${latest.provisioning_status}`}
-            time={new Date(latest.created_at).toLocaleString()}
-          />
-        ) : (
-          <div className="empty-state">Todavía no hay transacciones.</div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-// ==========================================
-// TARJETA DE SERVIDOR (SERVER CARD)
-// ==========================================
-
-function ServerCard({
-  server,
-  onOpen,
-  onAction,
-  onLifecycle,
-}: {
-  server: ServerRecord;
-  onOpen: () => void;
-  onAction: (message: string) => void;
-  onLifecycle: (action: "start" | "stop" | "restart" | "kill") => void;
-}) {
-  const starting = server.status === "Iniciando";
-  const can = (permission: string) =>
-    !server.isSubuser || server.permissions?.[permission] === true;
-
-  return (
-    <article className="server-card">
-      <div className="server-card-top">
-        <div className={`server-logo ${server.color}`}>
-          {server.type === "Velocity" ? (
-            <Network size={24} />
-          ) : (
-            <Box size={25} />
-          )}
-        </div>
-        <div className="server-card-badges">
-          {server.isSubuser && (
-            <span className="subuser-badge">
-              <Users size={12} /> Subusuario
-            </span>
-          )}
-          <button className="more-button">
-            <MoreHorizontal size={18} />
-          </button>
-        </div>
-      </div>
-
-      <div className="server-title-row">
-        <div>
-          <h3>{server.name}</h3>
-          <p>
-            {server.type} <span>·</span> {server.version}
-          </p>
-        </div>
-        <StatusPill status={server.status} />
-      </div>
-
-      <div className="server-address">
-        <span className="address-indicator" />
-        {server.address}:{server.port}
-        <Copy size={14} onClick={() => onAction("IP copiada al portapapeles")} />
-      </div>
-
-      <div className="server-meta">
-        <span>
-          <MemoryStick size={14} /> {server.ram} RAM
-        </span>
-        <span>
-          <Cpu size={14} /> 2 vCores
-        </span>
-      </div>
-
-      <div className="card-divider" />
-
-      <div className="server-actions server-lifecycle">
-        <button className="manage-button" onClick={onOpen}>
-          Administrar
-        </button>
-
-        {can("control.start") && (
-          <button
-            disabled={starting || server.status === "Online"}
-            onClick={() => onLifecycle("start")}
-            title="Iniciar"
-          >
-            <Play size={14} />
-          </button>
-        )}
-
-        {can("control.stop") && (
-          <button
-            disabled={starting || server.status !== "Online"}
-            onClick={() => onLifecycle("stop")}
-            title="Detener"
-          >
-            <Square size={14} />
-          </button>
-        )}
-
-        {can("control.restart") && (
-          <button
-            disabled={starting || server.status !== "Online"}
-            onClick={() => onLifecycle("restart")}
-            title="Reiniciar"
-          >
-            <RefreshCw size={14} />
-          </button>
-        )}
-
-        {can("control.stop") && (
-          <button
-            disabled={server.status === "Detenido"}
-            onClick={() => onLifecycle("kill")}
-            title="Kill"
-          >
-            <Power size={14} />
-          </button>
-        )}
-      </div>
-    </article>
-  );
-}
-
-// ==========================================
-// ITEM DE ACTIVIDAD
-// ==========================================
-
-function ActivityItem({
-  icon: Icon,
-  color,
-  title,
-  description,
-  time,
-}: {
-  icon: typeof Check;
-  color: string;
-  title: string;
-  description: string;
-  time: string;
-}) {
-  return (
-    <div className="activity-item">
-      <div className={`activity-icon ${color}`}>
-        <Icon size={16} />
-      </div>
-      <div className="activity-copy">
-        <strong>{title}</strong>
-        <span>{description}</span>
-      </div>
-      <time>{time}</time>
-    </div>
-  );
-}
-
-// ==========================================
 // GESTOR DE SERVIDOR (SERVER MANAGER)
 // ==========================================
 
@@ -849,7 +549,7 @@ function ServerManager({
   notify: (v: string) => void;
 }) {
   const isFiles = activeNav === "Archivos";
-  const busy = Boolean(pendingAction);
+  const busy = Boolean(pendingAction) || server.status === "Iniciando";
 
   const actionLabel = (
     action: "start" | "stop" | "restart" | "kill",
@@ -1049,7 +749,7 @@ function ServerManager({
           </div>
 
           {/* Vistas según pestaña activa */}
-          {activeNav === "Terminal" && (
+          {activeNav === "Terminal" && can("control.console") && (
             <TerminalView
               serverId={server.id}
               consoleLine={consoleLine}
@@ -1088,14 +788,14 @@ function ServerManager({
             />
           )}
 
-          {activeNav === "Network" && <NetworkView notify={notify} />}
+          {activeNav === "Network" && can("allocation.read") && <NetworkView server={server} notify={notify} />}
 
           {activeNav === "Backups" && (
             <PlaceholderView title="Backups" notify={notify} />
           )}
 
-          {activeNav === "Subusuarios" && (
-            <SubusersView serverId={server.id} notify={notify} />
+          {activeNav === "Subusuarios" && visibleNavItems.some(item => item.label === "Subusuarios") && (
+            <MembersView server={server} notify={notify} />
           )}
         </div>
       </section>
@@ -1106,201 +806,6 @@ function ServerManager({
 // ==========================================
 // VISTA: SUBUSUARIOS
 // ==========================================
-
-function SubusersView({
-  serverId,
-  notify,
-}: {
-  serverId?: string;
-  notify: (message: string) => void;
-}) {
-  const [email, setEmail] = useState("");
-  const [members, setMembers] = useState<
-    {
-      user_id: string;
-      email?: string;
-      permissions: Record<string, boolean>;
-    }[]
-  >([]);
-  const [permissions, setPermissions] = useState<string[]>([]);
-  const [saving, setSaving] = useState<string | null>(null);
-
-  const load = async () => {
-    if (!serverId) return;
-    const response = await fetch(`/api/servers/${serverId}/members`);
-    const data = await response.json();
-    if (!response.ok) {
-      notify(data.error || "No se pudieron cargar subusuarios");
-      return;
-    }
-    setMembers(data.members || []);
-    setPermissions(data.permissions || []);
-  };
-
-  useEffect(() => {
-    void load();
-  }, [serverId]);
-
-  const add = async () => {
-    const response = await fetch(`/api/servers/${serverId}/members`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email,
-        permissions: Object.fromEntries(
-          permissions.map((permission) => [permission, false])
-        ),
-      }),
-    });
-
-    const data = await response.json();
-    if (!response.ok) {
-      notify(data.error || "No se pudo agregar");
-    } else {
-      setEmail("");
-      notify("Subusuario agregado y notificado");
-      void load();
-    }
-  };
-
-  const updateLocal = (
-    userId: string,
-    permission: string,
-    enabled: boolean
-  ) => {
-    setMembers((current) =>
-      current.map((member) =>
-        member.user_id === userId
-          ? {
-              ...member,
-              permissions: { ...member.permissions, [permission]: enabled },
-            }
-          : member
-      )
-    );
-  };
-
-  const save = async (member: {
-    user_id: string;
-    permissions: Record<string, boolean>;
-  }) => {
-    setSaving(member.user_id);
-    const response = await fetch(
-      `/api/resources/${serverId}/subusers/${member.user_id}`,
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ permissions: member.permissions }),
-      }
-    );
-
-    const data = await response.json();
-    setSaving(null);
-
-    if (!response.ok) {
-      notify(data.error || "No se pudieron guardar los permisos");
-      return;
-    }
-
-    notify("Permisos actualizados correctamente");
-    setMembers((current) =>
-      current.map((item) =>
-        item.user_id === member.user_id
-          ? {
-              ...item,
-              permissions: data.subuser?.permissions || member.permissions,
-            }
-          : item
-      )
-    );
-  };
-
-  const remove = async (userId: string) => {
-    if (!window.confirm("¿Revocar el acceso de este usuario?")) return;
-
-    const response = await fetch(
-      `/api/resources/${serverId}/subusers/${userId}`,
-      {
-        method: "DELETE",
-      }
-    );
-
-    if (!response.ok) {
-      const data = await response.json();
-      notify(data.error || "No se pudo revocar el acceso");
-      return;
-    }
-
-    notify("Acceso revocado correctamente");
-    setMembers((current) =>
-      current.filter((member) => member.user_id !== userId)
-    );
-  };
-
-  return (
-    <div className="config-panel subusers-view">
-      <div className="panel-title">
-        <div>
-          <h2>Subusuarios</h2>
-          <span>Permisos independientes para este servidor</span>
-        </div>
-      </div>
-
-      <div className="subuser-invite">
-        <input
-          type="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          placeholder="correo@ejemplo.com"
-        />
-        <button
-          className="primary-button"
-          disabled={!email.trim()}
-          onClick={() => void add()}
-        >
-          Agregar usuario
-        </button>
-      </div>
-
-      {members.map((member) => (
-        <article className="member-row" key={member.user_id}>
-          <strong>{member.email || member.user_id}</strong>
-
-          <div className="permission-grid">
-            {permissions.map((permission) => (
-              <label key={permission}>
-                <input
-                  type="checkbox"
-                  checked={Boolean(member.permissions?.[permission])}
-                  onChange={(event) =>
-                    updateLocal(member.user_id, permission, event.target.checked)
-                  }
-                />
-                {permission}
-              </label>
-            ))}
-          </div>
-
-          <div className="member-actions">
-            <button
-              className="primary-button"
-              disabled={saving === member.user_id}
-              onClick={() => void save(member)}
-            >
-              {saving === member.user_id ? "Guardando..." : "Guardar permisos"}
-            </button>
-            <button
-              className="danger-button"
-              onClick={() => void remove(member.user_id)}
-            >
-              Revocar acceso
-            </button>
-          </div>
-        </article>
-      ))}
-    </div>
-  );
-}
 
 function BellIcon() {
   return <Activity size={18} />;
@@ -2540,35 +2045,21 @@ function NetworkView({
   const [servers, setServers] = useState<ServerRecord[]>([]);
   const [proxyId, setProxyId] = useState(server.id);
   const [connected, setConnected] = useState<
-    { name: string; address: string; priority: number }[]
+    { name: string; address: string; priority: number; serverId?: string }[]
   >([]);
   const [bind, setBind] = useState(`0.0.0.0:${server.port || 25565}`);
   const [motd, setMotd] = useState("");
   const [onlineMode, setOnlineMode] = useState(true);
   const [forwarding, setForwarding] = useState("modern");
   const [draggedId, setDraggedId] = useState("");
+  const [savingNetwork, setSavingNetwork] = useState(false);
 
   useEffect(() => {
     void fetch("/api/servers")
       .then((response) => response.json())
       .then((data: { servers: ServerRecord[] }) => {
-        const selectedName = document
-          .querySelector(".side-server strong")
-          ?.textContent?.trim();
-
-        const proxy =
-          data.servers.find(
-            (item) =>
-              item.name === selectedName &&
-              item.type.toLowerCase() === "velocity"
-          ) ||
-          data.servers.find((item) => item.type.toLowerCase() === "velocity");
-
-        if (proxy) {
-          setActiveServer(proxy);
-          setProxyId(proxy.id);
-          setBind(`0.0.0.0:${proxy.port || 25565}`);
-        }
+        const proxy = data.servers.find(item => item.id === server.id);
+        if (proxy) { setActiveServer(proxy); setProxyId(proxy.id); setBind(`0.0.0.0:${proxy.port || 25565}`); }
 
         setServers(
           data.servers.filter(
@@ -2608,11 +2099,12 @@ function NetworkView({
 
   const addDragged = () => {
     const target = servers.find((item) => item.id === draggedId);
-    if (target && !connected.some((item) => item.name === target.name)) {
+    if (target && !connected.some((item) => item.serverId === target.id || item.address === `127.0.0.1:${target.port}`)) {
       setConnected((items) => [
         ...items,
         {
-          name: target.name,
+          name: target.name.toLowerCase().replace(/[^a-z0-9_-]/g, "-").slice(0,48) + "-" + target.id?.slice(0,8),
+          serverId: target.id,
           address: `127.0.0.1:${target.port}`,
           priority: items.length + 1,
         },
@@ -2625,6 +2117,9 @@ function NetworkView({
       notify("No tienes permiso para modificar la Network");
       return;
     }
+    if (!proxyId || savingNetwork) return;
+    setSavingNetwork(true);
+    try {
     const response = await fetch(`/api/servers/${proxyId}/network`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -2640,9 +2135,10 @@ function NetworkView({
     const data = await response.json();
     notify(
       response.ok
-        ? "Configuración guardada en velocity.toml"
-        : data.error || "No se pudo guardar velocity.toml"
+        ? `Network configurada en el proxy y ${data.configuredServers?.length || 0} servidores. Ya puedes iniciarlos.`
+        : data.error || "No se pudo configurar la network"
     );
+    } catch (error) { notify(error instanceof Error ? error.message : "Error de conexión"); } finally { setSavingNetwork(false); }
   };
 
   return (
@@ -2650,10 +2146,10 @@ function NetworkView({
       <div className="panel-title">
         <div>
           <h2>Network de {activeServer.name}</h2>
-          <span>Configuración directa del proxy Velocity</span>
+          <span>Configuración automática del proxy y de todos los servidores conectados. Detén los servidores antes de guardar.</span>
         </div>
-        <button className="primary-button" onClick={() => void save()}>
-          <Check size={15} /> Guardar configuración
+        <button className="primary-button" disabled={savingNetwork || !proxyId || !canPanelPermission("allocation.update")} onClick={() => void save()}>
+          <Check size={15} /> {savingNetwork ? "Configurando toda la network…" : "Configurar network"}
         </button>
       </div>
 
@@ -2681,7 +2177,6 @@ function NetworkView({
           >
             <option value="modern">Modern</option>
             <option value="legacy">Legacy</option>
-            <option value="bungeeguard">BungeeGuard</option>
             <option value="none">None</option>
           </select>
         </label>
@@ -2711,7 +2206,7 @@ function NetworkView({
             >
               <Box size={15} />
               {item.name}
-              <small>{item.port}</small>
+              <small>{item.port}</small><button type="button" className="secondary-button" disabled={connected.some(entry => entry.address === `127.0.0.1:${item.port}`)} onClick={() => setConnected(entries => [...entries, { name: item.name.toLowerCase().replace(/[^a-z0-9_-]/g, "-").slice(0,48) + "-" + item.id?.slice(0,8), serverId: item.id, address: `127.0.0.1:${item.port}`, priority: entries.length + 1 }])}>Conectar</button>
             </div>
           ))}
         </div>

@@ -1,4 +1,6 @@
+import { normalizePermissions } from "@/lib/permissions";
 import { NextResponse } from "next/server";
+import { isAdminUser } from "@/lib/admin-auth";
 import { claimLegacyServers, listServers } from "@/lib/server-manager";
 import { currentUser } from "@/lib/server-auth";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -7,7 +9,7 @@ export const runtime = "nodejs";
 export async function GET() {
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: "Debes iniciar sesión" }, { status: 401 });
-  const isAdmin = user.email?.toLowerCase() === "000balderas@gmail.com" || user.app_metadata?.role === "admin";
+  const isAdmin = isAdminUser(user);
   if (isAdmin) await claimLegacyServers(user.id);
   if (isAdmin) return NextResponse.json({ servers: await listServers(user.id, true) });
   const [owned, memberships] = await Promise.all([
@@ -22,7 +24,7 @@ export async function GET() {
     servers: [...owned, ...shared.filter((server) => !owned.some((item) => item.id === server.id)).map((server) => ({
       ...server,
       isSubuser: true,
-      permissions: membershipsByServer.get(server.id)?.permissions || {},
+      permissions: normalizePermissions(membershipsByServer.get(server.id)?.permissions),
     }))],
   });
 }

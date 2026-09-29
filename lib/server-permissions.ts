@@ -1,3 +1,4 @@
+import { isAdminUser } from "@/lib/admin-auth";
 import { currentUser } from "@/lib/server-auth";
 import { getServer, type ServerRecord } from "@/lib/server-manager";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -17,7 +18,7 @@ type Access = { userId: string; server: ServerRecord; owner: boolean; permission
 export async function requireServerPermission(resourceId: string, permission?: ServerPermission): Promise<Access> {
   const user = await currentUser();
   if (!user) throw new PermissionDeniedError("Debes iniciar sesión", 401);
-  const isAdmin = user.email?.toLowerCase() === "000balderas@gmail.com" || user.app_metadata?.role === "admin";
+  const isAdmin = isAdminUser(user);
   const server = await getServer(resourceId);
   if (!server) throw new PermissionDeniedError("No tienes acceso a este servidor", 404);
   const owner = server.userId === user.id;

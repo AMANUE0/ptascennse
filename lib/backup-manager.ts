@@ -5,6 +5,10 @@ import path from "node:path";
 import { getServerDirectory } from "./server-manager";
 const execFileAsync = promisify(execFile);
 
+function psEscape(value: string) {
+  return "'" + String(value).replace(/'/g, "''") + "'";
+}
+
 async function backupDir(id: string) {
   const root = await getServerDirectory(id);
   const dir = path.join(root, "backups");
@@ -23,7 +27,7 @@ export async function createBackup(id: string) {
   const { root, dir } = await backupDir(id);
   const name = `backup-${new Date().toISOString().replace(/[:.]/g, "-")}.zip`;
   const destination = path.join(dir, name);
-  await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `Compress-Archive -Path ${JSON.stringify(path.join(root, "*"))} -DestinationPath ${JSON.stringify(destination)} -Force`]);
+  await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `Compress-Archive -Path ${psEscape(path.join(root, "*"))} -DestinationPath ${psEscape(destination)} -Force`]);
   return { name, size: (await stat(destination)).size, createdAt: new Date().toISOString() };
 }
 export async function backupPath(id: string, name: string) {

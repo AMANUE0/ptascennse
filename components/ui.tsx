@@ -87,7 +87,7 @@ export function QuickInfo({
       <div className={`quick-icon ${color}`}>
         <Icon size={18} />
       </div>
-      <div className="">
+      <div>
         <span>{title}</span>
         <strong>{value}</strong>
         <small>{detail}</small>

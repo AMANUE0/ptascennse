@@ -1,10 +1,16 @@
+import { configureNetwork } from "./network-provision";
+import { readVelocityConfig } from "./server-manager";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { getServer } from "./server-manager";
 
 export type NetworkRecord = { id: string; name: string; proxyId: string; serverIds: string[]; createdAt: string };
-const file = path.join(process.cwd(), "data", "networks.json");
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const root = process.env.CRAFTPANEL_ROOT || path.resolve(__dirname, "..");
+const dataDirectory = process.env.CRAFTPANEL_DATA_DIR ? path.resolve(process.env.CRAFTPANEL_DATA_DIR) : path.join(root, "data");
+const file = path.join(dataDirectory, "networks.json");
 let lock: Promise<void> = Promise.resolve();
 
 async function readNetworks(): Promise<NetworkRecord[]> {
@@ -22,8 +28,9 @@ async function writeNetworks(networks: NetworkRecord[]) {
 async function mutate(mutator: (items: NetworkRecord[]) => NetworkRecord[]) {
   let result: NetworkRecord[] = [];
   const previous = lock;
-  lock = previous.then(async () => { result = mutator(await readNetworks()); await writeNetworks(result); });
-  await lock;
+  const operation = previous.then(async () => { result = mutator(await readNetworks()); await writeNetworks(result); });
+  lock = operation.catch(() => undefined);
+  await operation;
   return result;
 }
 
@@ -46,6 +53,7 @@ export async function createNetwork(input: { name?: unknown; proxyId?: unknown; 
   const validServers = await Promise.all(serverIds.map((id) => getServer(id)));
   if (validServers.some((server) => !server)) throw new Error("Uno de los servidores no existe");
   const network: NetworkRecord = { id: randomUUID(), name, proxyId, serverIds: Array.from(new Set(serverIds)), createdAt: new Date().toISOString() };
+  await configureStoredNetwork(network);
   await mutate((items) => [...items, network]);
   return (await listNetworks()).find((item) => item.id === network.id);
 }
@@ -59,6 +67,8 @@ export async function updateNetwork(id: string, patch: { name?: unknown; proxyId
   if (typeof patch.proxyId === "string") next.proxyId = patch.proxyId;
   if (Array.isArray(patch.serverIds)) next.serverIds = Array.from(new Set(patch.serverIds.filter((value): value is string => typeof value === "string")));
   await createNetworkValidation(next);
+  if (next.proxyId !== current.proxyId) throw new Error("Crea una network nueva para cambiar el proxy");
+  await configureStoredNetwork(next);
   await mutate((items) => items.map((item) => item.id === id ? next : item));
   return (await listNetworks()).find((item) => item.id === id);
 }
@@ -70,5 +80,15 @@ async function createNetworkValidation(network: NetworkRecord) {
 export async function deleteNetwork(id: string) {
   const found = (await readNetworks()).some((item) => item.id === id);
   if (!found) throw new Error("Network not found");
+  const network = (await readNetworks()).find(item => item.id === id)!;
+  await configureStoredNetwork({ ...network, serverIds: [] });
   await mutate((items) => items.filter((item) => item.id !== id));
+}
+
+async function configureStoredNetwork(network: NetworkRecord) {
+  const proxy = await getServer(network.proxyId);
+  if (!proxy) throw new Error("Proxy no encontrado");
+  const existing = await readVelocityConfig(proxy.id);
+  const servers = await Promise.all(network.serverIds.map(id => getServer(id)));
+  await configureNetwork(proxy.id, { ...existing, bind: `0.0.0.0:${proxy.port}`, forwardingSecret: "", servers: servers.map((server, index) => { if (!server) throw new Error("Servidor no encontrado"); return { serverId: server.id, name: `server-${index+1}-${server.id.slice(0,8)}`, address: `127.0.0.1:${server.port}`, priority: index+1 }; }) });
 }

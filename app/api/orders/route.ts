@@ -36,21 +36,31 @@ export async function POST(request: Request) {
       dedicatedIp: Boolean(body.addons?.dedicatedIp),
       extraStorageGb: Math.max(0, Number(body.addons?.extraStorageGb) || 0),
     };
+    if (![0, 25, 50, 100].includes(addons.extraStorageGb)) throw new Error("Almacenamiento extra no válido");
+    if (!["Paper", "Velocity", "Fabric", "Forge"].includes(body.type || "Paper")) throw new Error("Software no válido");
     const storageGb = plan.storageGb + addons.extraStorageGb;
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
-    let callbackUrl: URL;
-    try {
-      callbackUrl = new URL(appUrl);
-    } catch {
-      throw new Error("NEXT_PUBLIC_APP_URL no contiene una URL válida");
-    }
-    if (callbackUrl.hostname === "localhost" || callbackUrl.hostname === "127.0.0.1" || callbackUrl.hostname === "::1") {
-      throw new Error("Mercado Pago necesita una URL pública HTTPS para volver a tu aplicación y enviar el webhook. Configura NEXT_PUBLIC_APP_URL con un túnel como ngrok o Cloudflare Tunnel.");
-    }
-    if (callbackUrl.protocol !== "https:") {
-      throw new Error("NEXT_PUBLIC_APP_URL debe usar HTTPS para pagos de producción");
+    if (paymentConfig.mode === "mercadopago") {
+      let callbackUrl: URL;
+      try {
+        callbackUrl = new URL(appUrl);
+      } catch {
+        throw new Error("NEXT_PUBLIC_APP_URL no contiene una URL válida");
+      }
+      if (callbackUrl.hostname === "localhost" || callbackUrl.hostname === "127.0.0.1" || callbackUrl.hostname === "::1") {
+        throw new Error("Mercado Pago necesita una URL pública HTTPS para volver a tu aplicación y enviar el webhook. Configura NEXT_PUBLIC_APP_URL con un túnel como ngrok o Cloudflare Tunnel.");
+      }
+      if (callbackUrl.protocol !== "https:") {
+        throw new Error("NEXT_PUBLIC_APP_URL debe usar HTTPS para pagos de producción");
+      }
     }
     const admin = supabaseAdmin();
+    const customerData = {
+      serverName: body.serverName.trim(),
+      type: body.type || "Paper",
+      version: body.version.trim(),
+
+    };
     const { data: order, error: orderError } = await admin.from("hosting_orders").insert({
       user_id: user.id,
       plan_id: plan.id,
@@ -59,7 +69,7 @@ export async function POST(request: Request) {
       storage_gb: storageGb,
       cpu: plan.cpu,
       addons,
-      customer_data: body.customerData || {},
+      customer_data: customerData,
       payment_method: body.paymentMethod,
       payment_status: "pending",
       provisioning_status: "pending",
