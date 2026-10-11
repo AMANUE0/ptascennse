@@ -46,5 +46,21 @@
     "storageGb": 10,
     "downloadUrl": "https://fill-data.papermc.io/v1/objects/5ee4f542f628a14c644410b08c94ea42e772ef4d29fe92973636b6813d4eaffc/paper-1.21.4-232.jar",
     "createdAt": "2026-09-29T01:27:52.417Z"
+  },
+  {
+    "id": "331044bf-90dc-4afd-a86f-0c91c6d1de86",
+    "userId": "84845a95-9707-45d4-b9cc-b01909ae0801",
+    "name": "asdf",
+    "type": "Paper",
+    "version": "1.21.4",
+    "ram": "512 MB",
+    "java": "java",
+    "command": "",
+    "port": 25568,
+    "jar": "server.jar",
+    "cpu": "1",
+    "storageGb": 10,
+    "downloadUrl": "https://fill-data.papermc.io/v1/objects/5ee4f542f628a14c644410b08c94ea42e772ef4d29fe92973636b6813d4eaffc/paper-1.21.4-232.jar",
+    "createdAt": "2026-09-29T15:46:04.353Z"
   }
 ]
